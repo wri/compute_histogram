@@ -39,15 +39,15 @@ def process_sources(
         print(sources)
 
         with rasterio.open(source[0]) as src1:
-            w = (src1.read(1) * 100).astype(int)
-            if source[1] is not None:
-                with rasterio.open(source[1]) as src2:
-                    mask_w = np.invert(src2.read(1).astype(bool))
-                    w = _apply_mask(_get_mask(w,0,mask_w), w)
-                    mask_w = None
-            else:
-                w = _apply_mask(_get_mask(w, 0), w)
-            yield (_compute_histogram(w, BINS, HISTO_RANGE),)
+            w = (src1.read(1) * 100).astype(np.uint16)
+        if source[1] is not None:
+            with rasterio.open(source[1]) as src2:
+                mask_w = np.invert(src2.read(1).astype(np.bool_))
+            w = _apply_mask(_get_mask(w,0,mask_w), w)
+            mask_w = None
+        else:
+            w = _apply_mask(_get_mask(w, 0), w)
+        yield (_compute_histogram(w, BINS, HISTO_RANGE),)
 
 
 def get_sources(tiles):
