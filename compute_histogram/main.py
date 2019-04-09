@@ -14,7 +14,7 @@ PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
     "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
 ]
-TILE_CSV = "csv/test_tiles.csv"
+TILE_CSV = "csv/tiles.csv"
 
 
 @stage(workers=WORKERS, qsize=QSIZE)
