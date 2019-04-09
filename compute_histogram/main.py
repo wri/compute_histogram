@@ -5,10 +5,10 @@ import os
 import csv
 
 
-HISTO_RANGE = (0, 1001)
+HISTO_RANGE = (0, 2001)
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
-WORKERS = 15
+WORKERS = 20
 QSIZE = 5
 PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
@@ -39,7 +39,7 @@ def process_sources(
         print(source)
 
         with rasterio.open(source[0]) as src1:
-            w = (src1.read(1) * 100).astype(np.uint16)
+            w = (src1.read(1) * 100).astype(np.int16)
         if source[1] is not None:
             with rasterio.open(source[1]) as src2:
                 mask_w = np.invert(src2.read(1).astype(np.bool_))
