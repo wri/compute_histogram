@@ -166,4 +166,4 @@ if __name__ == "__main__":
     print("Histogram: ")
     print(histogram)
 
-    np.savetxt("histogram.csv", histogram, delimiter=",")
+    np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
