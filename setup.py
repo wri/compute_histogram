@@ -7,6 +7,6 @@ setup(
     packages=["compute_histogram"],
     author="Thomas Maschler",
     license="MIT",
-    install_requires=["rasterio"],
+    install_requires=["rasterio", "parallelpipe"],
     scripts=["compute_histogram/main.py"],
 )

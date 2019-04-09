@@ -5,10 +5,11 @@ import os
 import csv
 
 
-HISTO_RANGE = (0, 1000)
-BINS = len(range(HISTO_RANGE[0],HISTO_RANGE[1]))
+HISTO_RANGE = (0, 1001)
+BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
-WORKERS = 1
+WORKERS = 15
+QSIZE = 5
 PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
     "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
@@ -16,7 +17,7 @@ PATHS = [
 TILE_CSV = "csv/test_tiles.csv"
 
 
-@stage(workers=WORKERS)
+@stage(workers=WORKERS, qsize=QSIZE)
 def process_sources(
     sources
 ):
@@ -35,6 +36,7 @@ def process_sources(
     """
 
     for source in sources:
+        print(sources)
 
         with rasterio.open(source[0]) as src1:
             w = (src1.read(1) * 100).astype(int)
@@ -156,5 +158,11 @@ if __name__ == "__main__":
         else:
             result = add_histogram(result, histo[0])
 
+
+    bins = np.array([x/100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
+    histogram = np.vstack((bins, result)).T
+
     print("Histogram: ")
-    print(result)
+    print(histogram)
+
+    np.savetxt("histogram.csv", histogram, delimiter=",")
