@@ -8,3 +8,4 @@ cd /home/ubuntu
 git clone https://github.com/wri/compute_histogram.git
 cd compute_histogram
 pip3 install -e .
+chmod -R 777 compute_histogram
