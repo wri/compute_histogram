@@ -36,7 +36,7 @@ def process_sources(
     """
 
     for source in sources:
-        print(sources)
+        print(source)
 
         with rasterio.open(source[0]) as src1:
             w = (src1.read(1) * 100).astype(np.uint16)
@@ -47,7 +47,9 @@ def process_sources(
             mask_w = None
         else:
             w = _apply_mask(_get_mask(w, 0), w)
-        yield (_compute_histogram(w, BINS, HISTO_RANGE),)
+        histo =_compute_histogram(w, BINS, HISTO_RANGE)
+        w = None
+        yield (histo,)
 
 
 def get_sources(tiles):
