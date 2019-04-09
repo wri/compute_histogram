@@ -44,7 +44,7 @@ def process_sources(
                     values = _apply_mask(_get_mask(w,0,mask_w), w)
             else:
                 values = _apply_mask(_get_mask(w, 0), w)
-            yield _compute_histogram(values, BINS, HISTO_RANGE)
+            yield (_compute_histogram(values, BINS, HISTO_RANGE),)
 
 
 def get_sources(tiles):
@@ -151,10 +151,10 @@ if __name__ == "__main__":
     result = None
     for histo in pipe.results():
         if first:
-            result = histo
+            result = histo[0]
             first = False
         else:
-            result = add_histogram(result, histo)
+            result = add_histogram(result, histo[0])
 
     print("Histogram: ")
     print(result)
