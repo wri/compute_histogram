@@ -51,7 +51,7 @@ def process_sources(
             w = None
             yield (histo, histo_m)
         else:
-            w = Nonesu
+            w = None
             yield (histo, histo)
 
 
