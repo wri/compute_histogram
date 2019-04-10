@@ -40,8 +40,9 @@ def process_sources(
 
         with rasterio.open(source[0]) as src1:
             w = (src1.read(1) * 100).astype(np.int16)
-        w = _apply_mask(_get_mask(w, 0), w)
-        histo = _compute_histogram(w, BINS, HISTO_RANGE)
+        w_m = _apply_mask(_get_mask(w, 0), w)
+        histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
+        w_m = None
         if source[1] is not None:
             with rasterio.open(source[1]) as src2:
                 mask_w = np.invert(src2.read(1).astype(np.bool_))
@@ -175,4 +176,4 @@ if __name__ == "__main__":
     print(histogram)
 
     np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
-    np.savetxt("histogram_masked.csv", histogram, fmt='%1.2f, %d')
+    np.savetxt("histogram_masked.csv", histogram_m, fmt='%1.2f, %d')
