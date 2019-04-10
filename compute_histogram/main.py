@@ -8,7 +8,7 @@ import csv
 HISTO_RANGE = (0, 2001)
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
-WORKERS = 20
+WORKERS = 25
 QSIZE = 5
 PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
@@ -40,16 +40,19 @@ def process_sources(
 
         with rasterio.open(source[0]) as src1:
             w = (src1.read(1) * 100).astype(np.int16)
+        w = _apply_mask(_get_mask(w, 0), w)
+        histo = _compute_histogram(w, BINS, HISTO_RANGE)
         if source[1] is not None:
             with rasterio.open(source[1]) as src2:
                 mask_w = np.invert(src2.read(1).astype(np.bool_))
-            w = _apply_mask(_get_mask(w,0,mask_w), w)
+            w = _apply_mask(_get_mask(w, 0, mask_w), w)
             mask_w = None
+            histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
+            w = None
+            yield (histo, histo_m)
         else:
-            w = _apply_mask(_get_mask(w, 0), w)
-        histo =_compute_histogram(w, BINS, HISTO_RANGE)
-        w = None
-        yield (histo,)
+            w = Nonesu
+            yield (histo, histo)
 
 
 def get_sources(tiles):
@@ -154,18 +157,22 @@ if __name__ == "__main__":
 
     first = True
     result = None
+    result_m = None
     for histo in pipe.results():
         if first:
             result = histo[0]
+            result_m = histo[1]
             first = False
         else:
             result = add_histogram(result, histo[0])
-
+            result_m = add_histogram(result_m, histo[1])
 
     bins = np.array([x/100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
     histogram = np.vstack((bins, result)).T
+    histogram_m = np.vstack((bins, result_m)).T
 
     print("Histogram: ")
     print(histogram)
 
     np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
+    np.savetxt("histogram_masked.csv", histogram, fmt='%1.2f, %d')
