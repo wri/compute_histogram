@@ -39,7 +39,8 @@ def process_sources(
         print(source)
 
         with rasterio.open(source[0]) as src1:
-            w = (np.log(src1.read(1)) * 100).astype(np.int16)
+            w = src1.read(1).astype(np.uint16)
+            w = (np.log(w, where=w > 0) * 100).astype(np.uint16)
         w_m = _apply_mask(_get_mask(w, 0), w)
         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
         w_m = None
