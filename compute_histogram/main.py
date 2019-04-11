@@ -41,16 +41,16 @@ def process_sources(
         with rasterio.open(source[0]) as src1:
             w = src1.read(1)
             mask = w == 0
-            w = w + mask * -9999
+            w = w + mask * -99
             w = (np.log(w, where=np.invert(mask)) * 100).astype(np.int16)
             mask = None
-        w_m = _apply_mask(_get_mask(w, -9999), w)
+        w_m = _apply_mask(_get_mask(w, -9900), w)
         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
         w_m = None
         if source[1] is not None:
             with rasterio.open(source[1]) as src2:
                 mask_w = np.invert(src2.read(1).astype(np.bool_))
-            w = _apply_mask(_get_mask(w, -9999, mask_w), w)
+            w = _apply_mask(_get_mask(w, -9900, mask_w), w)
             mask_w = None
             histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
             w = None
