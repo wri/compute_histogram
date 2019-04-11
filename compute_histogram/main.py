@@ -5,7 +5,7 @@ import os
 import csv
 
 
-HISTO_RANGE = (0, 1651)
+HISTO_RANGE = (-2000, 2001)
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
 WORKERS = 25
@@ -39,14 +39,18 @@ def process_sources(
         print(source)
 
         with rasterio.open(source[0]) as src1:
-            w = (src1.read(1) * 100).astype(np.uint16)
-        w_m = _apply_mask(_get_mask(w, 0), w)
+            w = src1.read(1)
+            mask = w == 0
+            w = w + mask * -9999
+            w = (np.log(w, where=np.invert(mask)) * 100).astype(np.int16)
+            mask = None
+        w_m = _apply_mask(_get_mask(w, -9999), w)
         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
         w_m = None
         if source[1] is not None:
             with rasterio.open(source[1]) as src2:
                 mask_w = np.invert(src2.read(1).astype(np.bool_))
-            w = _apply_mask(_get_mask(w, 0, mask_w), w)
+            w = _apply_mask(_get_mask(w, -9999, mask_w), w)
             mask_w = None
             histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
             w = None
@@ -168,7 +172,7 @@ if __name__ == "__main__":
             result = add_histogram(result, histo[0])
             result_m = add_histogram(result_m, histo[1])
 
-    bins = np.array([x/100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
+    bins = np.exp(np.array([x/100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])]))
     histogram = np.vstack((bins, result)).T
     histogram_m = np.vstack((bins, result_m)).T
 
