@@ -14,7 +14,7 @@ PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
     "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
 ]
-TILE_CSV = "csv/tiles.csv"
+TILE_CSV = "csv/bio_intact_list.txt"
 
 
 @stage(workers=WORKERS, qsize=QSIZE)
@@ -38,8 +38,8 @@ def process_sources(
     for source in sources:
         print(source)
 
-        with rasterio.open(source[0]) as src1:
-            w = src1.read(1)
+        with rasterio.open(source) as src:
+            w = src.read(1)
             mask = w == 0
             w = w + mask * -99
             w = (np.log(w, where=np.invert(mask)) * 100).astype(np.int16)
@@ -47,17 +47,17 @@ def process_sources(
         w_m = _apply_mask(_get_mask(w, -9900), w)
         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
         w_m = None
-        if source[1] is not None:
-            with rasterio.open(source[1]) as src2:
-                mask_w = np.invert(src2.read(1).astype(np.bool_))
-            w = _apply_mask(_get_mask(w, -9900, mask_w), w)
-            mask_w = None
-            histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
-            w = None
-            yield (histo, histo_m)
-        else:
-            w = None
-            yield (histo, histo)
+        # if source[1] is not None:
+        #     with rasterio.open(source[1]) as src2:
+        #         mask_w = np.invert(src2.read(1).astype(np.bool_))
+        #     w = _apply_mask(_get_mask(w, -9900, mask_w), w)
+        #     mask_w = None
+        #     histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
+        #     w = None
+        #     yield (histo, histo_m)
+        # else:
+        #     w = None
+        yield histo
 
 
 def get_sources(tiles):
@@ -112,7 +112,7 @@ def get_tiles():
     with open(os.path.join(dir, TILE_CSV)) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
         for row in csv_reader:
-            tiles.append(row)
+            tiles.append(row[0])
 
     return tiles
 
@@ -152,8 +152,7 @@ def _get_left(coord):
 
 if __name__ == "__main__":
 
-    tiles = get_tiles()
-    sources = get_sources(tiles)
+    sources = get_tiles()
 
     print("Processing sources:")
     print(sources)
@@ -165,19 +164,16 @@ if __name__ == "__main__":
     result_m = None
     for histo in pipe.results():
         if first:
-            result = histo[0]
-            result_m = histo[1]
+            result = histo
             first = False
         else:
-            result = add_histogram(result, histo[0])
-            result_m = add_histogram(result_m, histo[1])
+            result = add_histogram(result, histo)
 
     bins = np.exp(np.array([x/100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])]))
     histogram = np.vstack((bins, result)).T
-    histogram_m = np.vstack((bins, result_m)).T
 
     print("Histogram: ")
     print(histogram)
 
     np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
-    np.savetxt("histogram_masked.csv", histogram_m, fmt='%1.2f, %d')
+
