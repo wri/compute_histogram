@@ -5,11 +5,13 @@ import os
 import csv
 
 
-HISTO_RANGE = (-2000, 2001)
+# HISTO_RANGE = (-2000, 2001)
+HISTO_RANGE = (0, 1651)
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
 WORKERS = 25
 QSIZE = 5
+
 PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
     "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
@@ -38,26 +40,54 @@ def process_sources(
     for source in sources:
         print(source)
 
-        with rasterio.open(source) as src:
-            w = src.read(1)
-            mask = w == 0
-            w = w + mask * -99
-            w = (np.log(w, where=np.invert(mask)) * 100).astype(np.int16)
-            mask = None
-        w_m = _apply_mask(_get_mask(w, -9900), w)
+        with rasterio.open(source) as src1:
+            w = (src1.read(1) * 100).astype(np.uint16)
+        w_m = _apply_mask(_get_mask(w, 0), w)
         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
         w_m = None
-        # if source[1] is not None:
-        #     with rasterio.open(source[1]) as src2:
-        #         mask_w = np.invert(src2.read(1).astype(np.bool_))
-        #     w = _apply_mask(_get_mask(w, -9900, mask_w), w)
-        #     mask_w = None
-        #     histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
-        #     w = None
-        #     yield (histo, histo_m)
-        # else:
-        #     w = None
-        yield (histo,)
+        yield (histo, )
+#
+# @stage(workers=WORKERS, qsize=QSIZE)
+# def process_sources(
+#     sources
+# ):
+#     """
+#     Loops over all blocks and reads first input raster to get coordinates.
+#     Append values from all input rasters
+#     :param blocks: list of blocks to process
+#     :param src_rasters: list of input rasters
+#     :param col_size: pixel width
+#     :param row_size: pixel height
+#     :param step_width: block width
+#     :param step_height: block height
+#     :param width: image width
+#     :param height: image height
+#     :return: Table of Lat/Lon coord and corresponding raster values
+#     """
+#
+#     for source in sources:
+#         print(source)
+#
+#         with rasterio.open(source) as src:
+#             w = src.read(1)
+#             mask = w == 0
+#             w = w + mask * -99
+#             w = (np.log(w, where=np.invert(mask)) * 100).astype(np.int16)
+#             mask = None
+#         w_m = _apply_mask(_get_mask(w, -9900), w)
+#         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
+#         w_m = None
+#         # if source[1] is not None:
+#         #     with rasterio.open(source[1]) as src2:
+#         #         mask_w = np.invert(src2.read(1).astype(np.bool_))
+#         #     w = _apply_mask(_get_mask(w, -9900, mask_w), w)
+#         #     mask_w = None
+#         #     histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
+#         #     w = None
+#         #     yield (histo, histo_m)
+#         # else:
+#         #     w = None
+#         yield (histo,)
 
 
 def get_sources(tiles):
