@@ -5,8 +5,8 @@ import os
 import csv
 
 
-# HISTO_RANGE = (-2000, 2001)
-HISTO_RANGE = (0, 1651)
+HISTO_RANGE = (-2000, 2001)
+# HISTO_RANGE = (0, 1651)
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
 WORKERS = 25
