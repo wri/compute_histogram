@@ -57,7 +57,7 @@ def process_sources(
         #     yield (histo, histo_m)
         # else:
         #     w = None
-        yield histo
+        yield (histo,)
 
 
 def get_sources(tiles):
@@ -164,7 +164,7 @@ if __name__ == "__main__":
     result_m = None
     for histo in pipe.results():
         if first:
-            result = histo
+            result = histo[0]
             first = False
         else:
             result = add_histogram(result, histo)
