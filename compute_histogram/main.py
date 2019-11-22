@@ -151,8 +151,8 @@ def warp(sources):
 
 if __name__ == "__main__":
 
-    # sources = get_tiles()
-    sources = ["/vsis3/gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
+    sources = get_tiles()
+    # sources = ["/vsis3/gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
     print("Processing sources:")
     print(sources)
 
