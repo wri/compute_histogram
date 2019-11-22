@@ -46,92 +46,21 @@ def process_sources(
         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
         w_m = None
         yield (histo, )
-#
-# @stage(workers=WORKERS, qsize=QSIZE)
-# def process_sources(
-#     sources
-# ):
-#     """
-#     Loops over all blocks and reads first input raster to get coordinates.
-#     Append values from all input rasters
-#     :param blocks: list of blocks to process
-#     :param src_rasters: list of input rasters
-#     :param col_size: pixel width
-#     :param row_size: pixel height
-#     :param step_width: block width
-#     :param step_height: block height
-#     :param width: image width
-#     :param height: image height
-#     :return: Table of Lat/Lon coord and corresponding raster values
-#     """
-#
-#     for source in sources:
-#         print(source)
-#
-#         with rasterio.open(source) as src:
-#             w = src.read(1)
-#             mask = w == 0
-#             w = w + mask * -99
-#             w = (np.log(w, where=np.invert(mask)) * 100).astype(np.int16)
-#             mask = None
-#         w_m = _apply_mask(_get_mask(w, -9900), w)
-#         histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
-#         w_m = None
-#         # if source[1] is not None:
-#         #     with rasterio.open(source[1]) as src2:
-#         #         mask_w = np.invert(src2.read(1).astype(np.bool_))
-#         #     w = _apply_mask(_get_mask(w, -9900, mask_w), w)
-#         #     mask_w = None
-#         #     histo_m = _compute_histogram(w, BINS, HISTO_RANGE)
-#         #     w = None
-#         #     yield (histo, histo_m)
-#         # else:
-#         #     w = None
-#         yield (histo,)
 
 
-def get_sources(tiles):
+@stage(workers=WORKERS, qsize=QSIZE)
+def get_min_max(sources):
 
-    sources = list()
+    for source in sources:
+        print(source)
 
-    for tile in tiles:
+        with rasterio.open(source) as src1:
+            w = (src1.read(1))
 
-        row, col, min_x, min_y, max_x, max_y = tile
-        tile_id = "{}_{}".format(_get_top(int(max_y)), _get_left(int(min_x)))
-        path1 = PATHS[0].format(tile_id=tile_id)
-        path2 = PATHS[1].format(tile_id=tile_id)
-
-        try:
-            with rasterio.open(path1) as src1:
-                width = src1.width
-                height = src1.height
-                left, bottom, right, top = src1.bounds
-
-                print("Found " + path1)
-
-        except Exception:
-            print("Could not find " + path1)
-        else:
-            try:
-                with rasterio.open(path2) as src2:
-                    assert width == src2.width, "Input rasters must have same dimensions. Abort."
-                    assert (height == src2.height), "Input rasters must have same dimensions Abort."
-
-                    s_left, s_bottom, s_right, s_top = src2.bounds
-
-                    assert round(left, 4) == round(s_left, 4), "Input rasters must have same bounds. Abort."
-                    assert round(bottom, 4) == round(s_bottom, 4), "Input rasters must have same bounds. Abort."
-                    assert round(right, 4) == round(s_right, 4), "Input rasters must have same bounds. Abort."
-                    assert round(top, 4) == round(s_top, 4), "Input rasters must have same bounds. Abort."
-
-            except Exception:
-                print("Could not find " + path2)
-                sources.append([path1, None])
-            else:
-                print("Found " + path2)
-                sources.append([path1, path2])
-
-    return sources
+        min = w.min
+        max = w.max
+        w = None
+        yield (min, max)
 
 
 def get_tiles():
@@ -180,13 +109,7 @@ def _get_left(coord):
         return f"{-coord:003}" + "W"
 
 
-if __name__ == "__main__":
-
-    sources = get_tiles()
-
-    print("Processing sources:")
-    print(sources)
-
+def get_histo(sources):
     pipe = sources | process_sources
 
     first = True
@@ -199,7 +122,7 @@ if __name__ == "__main__":
         else:
             result = add_histogram(result, histo)
 
-    bins = np.exp(np.array([x/100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])]))
+    bins = np.exp(np.array([x / 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])]))
     histogram = np.vstack((bins, result)).T
 
     print("Histogram: ")
@@ -207,3 +130,23 @@ if __name__ == "__main__":
 
     np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
 
+if __name__ == "__main__":
+
+    sources = get_tiles()
+
+    print("Processing sources:")
+    print(sources)
+
+    pipe = sources | get_min_max
+
+    min = 0
+    max = 0
+
+    for minmax in pipe.results():
+        if minmax[0] < min:
+            min = minmax[0]
+        if minmax[1] > max:
+            max = minmax[1]
+
+    print(f"min: {min}, max: {max}")
+    print("Done")
