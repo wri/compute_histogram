@@ -6,11 +6,11 @@ import csv
 import subprocess as sp
 
 
-HISTO_RANGE = (-2000, 2001)
-# HISTO_RANGE = (0, 1651)
+HISTO_RANGE = (-10000, 300) # intactness: actual range -99.16411508262776 -2.7564810989789996  -> use int(value * 100)
+# HISTO_RANGE = (2500, 11000) # significance: -87.13933117310584 - 44590.80941143941 -> use log(value + 100) * 1000
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
-WORKERS = 25
+WORKERS = 50
 QSIZE = 5
 
 PATHS = [
@@ -41,11 +41,18 @@ def process_sources(
     for source in sources:
         print(source)
 
-        with rasterio.open(source) as src1:
-            w = (src1.read(1) * 100).astype(np.uint16)
-        w_m = _apply_mask(_get_mask(w, 0), w)
-        histo = _compute_histogram(w_m, BINS, HISTO_RANGE)
-        w_m = None
+        with rasterio.open(source) as src:
+            w = src.read(1)
+        # m = _get_mask(w, 0)
+        # min = np.min(m)
+        # max = np.max(m)
+        w = w[~np.isnan(w)]
+
+        w = (w * 100).astype(np.int16)  # intactness
+        # w = (np.log(w + 100) * 1000).astype(np.int16)  # significance
+
+        histo = _compute_histogram(w, BINS, HISTO_RANGE)
+        w = None
         yield (histo, )
 
 
@@ -61,6 +68,7 @@ def get_min_max(sources):
         min = np.amin(w)
         max = np.amax(w)
         w = None
+        print(min,max)
         yield (min, max)
 
 
@@ -96,20 +104,6 @@ def _compute_histogram(w, bins, range):
     return np.histogram(w, bins, range)[0]
 
 
-def _get_top(coord):
-    if coord >= 0:
-        return f"{coord:02}" + "N"
-    else:
-        return f"{-coord:02}" + "S"
-
-
-def _get_left(coord):
-    if coord >= 0:
-        return f"{coord:003}" + "E"
-    else:
-        return f"{-coord:003}" + "W"
-
-
 def get_histo(sources):
     pipe = sources | process_sources
 
@@ -123,12 +117,23 @@ def get_histo(sources):
         else:
             result = add_histogram(result, histo)
 
-    bins = np.exp(np.array([x / 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])]))
+    bins = np.array([x / 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
     histogram = np.vstack((bins, result)).T
 
     print("Histogram: ")
     print(histogram)
 
+    s = np.sum(result)
+    cs = np.cumsum(result)
+    perc = cs/s
+
+    i = 0
+    for i in range(len(result)):
+        if perc[i] >= 0.9:
+            break
+
+    with open("percentile.csv", "w") as src:
+        src.write(str(bins[i]))
     np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
 
 @stage(workers=WORKERS, qsize=QSIZE)
@@ -146,21 +151,10 @@ def warp(sources):
 
 if __name__ == "__main__":
 
-    sources = get_tiles()
-
+    # sources = get_tiles()
+    sources = ["/vsis3/gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
     print("Processing sources:")
     print(sources)
 
-    pipe = sources | warp | get_min_max
+    get_histo(sources)
 
-    min = 0
-    max = 0
-
-    for minmax in pipe.results():
-        if minmax[0] < min:
-            min = minmax[0]
-        if minmax[1] > max:
-            max = minmax[1]
-
-    print(f"min: {min}, max: {max}")
-    print("Done")
