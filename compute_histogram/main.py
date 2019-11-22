@@ -1,87 +1,61 @@
-from parallelpipe import stage
-import rasterio
-import numpy as np
 import os
 import csv
-import subprocess as sp
+import multiprocessing
+from typing import Iterable, List, Optional, Tuple
+
+import click
+import numpy as np
+import rasterio
+from parallelpipe import stage
+
+WORKERS: int = multiprocessing.cpu_count()
+QSIZE: int = 5
 
 
-# HISTO_RANGE = (-10000, 300) # intactness: actual range -99.16411508262776 -2.7564810989789996  -> use int(value * 100)
-HISTO_RANGE = (2500, 11000) # significance: -87.13933117310584 - 44590.80941143941 -> use log(value + 100) * 1000
-BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
-MAX_BLOCK_SIZE = 4000
-WORKERS = 80
-QSIZE = 5
+@click.command()
+@click.argument("tiles", type=str)
+@click.option(
+    "-m", "--method", default="linear", type=str, help="Method for creating bins"
+)
+@click.option(
+    "-w", "--workers", default=None, type=int, help="Number of parallel workers"
+)
+@click.option(
+    "--minmax_only",
+    is_flag=True,
+    default=False,
+    type=bool,
+    help="Only compute minmax, not histogram",
+)
+def cli(tiles: str, method: str, workers: Optional[int], minmax_only: bool):
 
-PATHS = [
-    "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
-    "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
-]
-TILE_CSV = "csv/bio_sig_list.txt"
+    histo_range: Tuple[int, int]
+    bins: int
+    offset: float
+    min_value: float
+    max_value: float
 
+    if workers:
+        global WORKERS
+        WORKERS = workers
 
-@stage(workers=WORKERS, qsize=QSIZE)
-def process_sources(
-    sources
-):
-    """
-    Loops over all blocks and reads first input raster to get coordinates.
-    Append values from all input rasters
-    :param blocks: list of blocks to process
-    :param src_rasters: list of input rasters
-    :param col_size: pixel width
-    :param row_size: pixel height
-    :param step_width: block width
-    :param step_height: block height
-    :param width: image width
-    :param height: image height
-    :return: Table of Lat/Lon coord and corresponding raster values
-    """
+    # sources: List[str] = get_tiles(tiles)
+    sources = ["s3://gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
+    click.echo("Processing sources:")
+    click.echo(sources)
 
-    for source in sources:
-        print(source)
+    min_value, max_value = compute_min_max(sources)
 
-        try:
-            with rasterio.open(source) as src:
-                w = src.read(1)
-        except rasterio.RasterioIOError:
-            print(f"Could not read {source}")
-            raise
-        # m = _get_mask(w, 0)
-        # min = np.min(m)
-        # max = np.max(m)
-        w = w[~np.isnan(w)]
-
-        # w = (w * 100).astype(np.int16)  # intactness
-        w = (np.log(w + 100) * 1000).astype(np.int16)  # significance
-
-        histo = _compute_histogram(w, BINS, HISTO_RANGE)
-        w = None
-        yield (histo, )
+    if not minmax_only:
+        histo_range, bins, offset = get_range(min_value, max_value, method)
+        get_histo(sources, histo_range, bins, offset, method)
 
 
-@stage(workers=WORKERS, qsize=QSIZE)
-def get_min_max(sources):
+def get_tiles(f: str):
 
-    for source in sources:
-        print(source)
+    tiles: List[str] = list()
 
-        with rasterio.open(source) as src1:
-            w = (src1.read(1))
-
-        min = np.amin(w)
-        max = np.amax(w)
-        w = None
-        print(min,max)
-        yield (min, max)
-
-
-def get_tiles():
-
-    tiles = list()
-
-    dir = os.path.dirname(__file__)
-    with open(os.path.join(dir, TILE_CSV)) as csv_file:
+    with open(os.path.join(f)) as csv_file:
         csv_reader = csv.reader(csv_file, delimiter=",")
         for row in csv_reader:
             tiles.append(row[0])
@@ -89,77 +63,146 @@ def get_tiles():
     return tiles
 
 
-def add_histogram(h1, h2):
-    return h1 + h2
+def get_histo(
+    sources: List[str],
+    histo_range: Tuple[int, int],
+    bins: int,
+    offset: float,
+    method: str,
+) -> None:
+    pipe = sources | process_sources(histo_range, bins, method)
 
+    first: bool = True
+    result: Optional[np.ndarray] = None
 
-def _get_mask(w, no_data=0, mask_w=None):
-    if mask_w is not None:
-        return mask_w * (w != no_data)
-    else:
-        return w != no_data
-
-
-def _apply_mask(mask, w):
-    return np.extract(mask, w)
-
-
-def _compute_histogram(w, bins, range):
-    return np.histogram(w, bins, range)[0]
-
-
-def get_histo(sources):
-    pipe = sources | process_sources
-
-    first = True
-    result = None
-    result_m = None
     for histo in pipe.results():
         if first:
             result = histo[0]
             first = False
         else:
-            result = add_histogram(result, histo)
+            result = _add_histogram(result, histo)
 
-    # bins = np.array([x / 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
-    bins = np.array([np.exp(x/1000) - 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
-    histogram = np.vstack((bins, result)).T
+    if method == "linear":
+        bins = np.array([x / 100 for x in range(histo_range[0], histo_range[1])])
+    elif method == "log":
+        bins = np.array(
+            [np.exp(x / 1000) - offset for x in range(histo_range[0], histo_range[1])]
+        )
+    else:
+        raise ValueError(f"Unknown method {method}")
 
-    print("Histogram: ")
-    print(histogram)
+    histogram: np.ndarray = np.vstack((bins, result)).T
 
-    s = np.sum(result)
-    cs = np.cumsum(result)
-    perc = cs/s
+    click.echo("Histogram: ")
+    click.echo(histogram)
 
-    i = 0
-    for i in range(len(result)):
-        if perc[i] >= 0.9:
-            break
+    np.savetxt("histogram.csv", histogram, fmt="%1.2f, %d")
 
-    with open("percentile.csv", "w") as src:
-        src.write(str(bins[i]))
-    np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
+
+def compute_min_max(sources: List[str]) -> Tuple[float, float]:
+    min_value: float = 0
+    max_value: float = 0
+
+    pipe = sources | get_min_max
+    for minmax in pipe.results():
+        if minmax[0] < min_value:
+            min_value = minmax[0]
+        if minmax[1] > max_value:
+            max_value = minmax[1]
+
+    click.echo(f"MIN: {min_value}, MAX: {max_value}")
+    return min_value, max_value
+
+
+def get_range(
+    min_value: float, max_value: float, method: str
+) -> Tuple[Tuple[int, int], int, float]:
+    offset: float = 0
+
+    click.echo(f"Min: {min_value}, Max: {max_value}")
+
+    if method == "linear":
+        histo_range: Tuple[int, int] = (
+            int(min_value * 100) - 10,
+            int(max_value * 100) + 10,
+        )
+    elif method == "log":
+        if min_value < 0:
+            offset = abs(min_value) + 1
+        histo_range = (
+            np.log(min_value + offset) * 1000,
+            np.log(max_value + offset) * 1000,
+        )
+    else:
+        raise ValueError(f"Unknown method {method}")
+
+    bins: int = len(range(histo_range[0], histo_range[1]))
+    click.echo(f"RANGE: {histo_range}, BINS: {bins}, OFFSET: {offset}")
+
+    return histo_range, bins, offset
+
 
 @stage(workers=WORKERS, qsize=QSIZE)
-def warp(sources):
+def process_sources(
+    sources: Iterable[str], histo_range: Tuple[int, int], bins: int, method: str
+) -> Iterable[Tuple[np.ndarray]]:
+    """
+    Loops over all blocks and reads first input raster to get coordinates.
+    Append values from all input rasters
+    """
+
     for source in sources:
-        local_src = os.path.join("/mnt/data/img/sig", os.path.basename(source))
-        cmd = ["gdalwarp", "-co", "COMPRESS=LZW", source, local_src]
-        p = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
-        o, e = p.communicate()
-        print(o)
-        if p.returncode != 0:
-            raise Exception(e)
-        yield local_src
+        click.echo(source)
+
+        try:
+            with rasterio.open(source) as src:
+                w: np.ndarray = src.read(1)
+        except rasterio.RasterioIOError:
+            click.echo(f"Could not read {source}")
+            raise
+
+        w = w[~np.isnan(w)]
+
+        if method == "linear":
+            w = (w * 100).astype(np.int16)
+        elif method == "log":
+            w = (np.log(w + 100) * 1000).astype(np.int16)
+        else:
+            raise ValueError(f"Unknown method {method}")
+
+        histo: np.ndarray = _compute_histogram(w, bins, histo_range)
+        w = None
+        yield (histo,)
+
+
+@stage(workers=WORKERS, qsize=QSIZE)
+def get_min_max(sources: Iterable[str]) -> Iterable[Tuple[int, int]]:
+
+    for source in sources:
+        click.echo(f"Reading tile {source}")
+
+        with rasterio.open(source) as src:
+            w = src.read(1)
+
+        w = w[~np.isnan(w)]
+
+        if len(w):
+            min = np.amin(w)
+            max = np.amax(w)
+            w = None
+            click.echo(f"Tile {source} has min {min} and max {max}")
+            yield (min, max)
+        else:
+            click.echo(f"Tile {source} is empty")
+
+
+def _add_histogram(h1: np.ndarray, h2: np.ndarray) -> np.ndarray:
+    return h1 + h2
+
+
+def _compute_histogram(w: np.ndarray, bins: int, range: Tuple[int, int]) -> np.ndarray:
+    return np.histogram(w, bins, range)[0]
 
 
 if __name__ == "__main__":
-
-    sources = get_tiles()
-    # sources = ["/vsis3/gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
-    print("Processing sources:")
-    print(sources)
-
-    get_histo(sources)
-
+    cli()

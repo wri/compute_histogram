@@ -2,11 +2,14 @@ from setuptools import setup
 
 setup(
     name="compute_histogram",
-    version="0.1.0",
+    version="0.2.0",
     description="Tool to calculate histogram for input layer using optional mask layer",
     packages=["compute_histogram"],
     author="Thomas Maschler",
     license="MIT",
-    install_requires=["rasterio[s3]", "parallelpipe"],
-    scripts=["compute_histogram/main.py"],
+    install_requires=["click", "rasterio[s3]", "parallelpipe"],
+    entry_points="""
+                [console_scripts]
+                compute_histogram=compute_histogram.main:cli
+                """,
 )
