@@ -17,7 +17,7 @@ PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
     "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
 ]
-TILE_CSV = "csv/bio_intact_list.txt"
+TILE_CSV = "csv/bio_sig_list.txt"
 
 
 @stage(workers=WORKERS, qsize=QSIZE)
@@ -134,7 +134,7 @@ def get_histo(sources):
 @stage(workers=WORKERS, qsize=QSIZE)
 def warp(sources):
     for source in sources:
-        local_src = os.path.join("/mnt/data/img", os.path.basename(source))
+        local_src = os.path.join("/mnt/data/img/sig", os.path.basename(source))
         cmd = ["gdalwarp", "-co", "COMPRESS=LZW", source, local_src]
         p = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
         o, e = p.communicate()
