@@ -1,34 +1,9 @@
 import numpy as np
-from compute_histogram.main import (
-    _compute_histogram,
-    _add_histogram,
-    _get_mask,
-    _apply_mask,
-)
+from compute_histogram.main import _compute_histogram, _add_histogram
 
 
 a = np.array([[1, 2, 3], [2, 3, 4], [3, 4, 5]])
 mask_layer = np.array([[False, True, True], [True, False, True], [True, True, False]])
-
-
-def test_get_mask():
-
-    mask = _get_mask(a, 2)
-    assert np.all(
-        mask
-        == np.array([[False, False, True], [False, True, True], [True, True, True]])
-    )
-
-    mask = _get_mask(a, 2, mask_layer)
-    assert np.all(
-        mask
-        == np.array([[False, False, True], [False, False, True], [True, True, False]])
-    )
-
-
-def test_apply_mask():
-    w = _apply_mask(mask_layer, a)
-    assert np.all(w == np.array([2, 3, 2, 4, 3, 4]))
 
 
 def test_make_histogram():

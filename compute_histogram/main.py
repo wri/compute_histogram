@@ -39,8 +39,8 @@ def cli(tiles: str, method: str, workers: Optional[int], minmax_only: bool):
         global WORKERS
         WORKERS = workers
 
-    # sources: List[str] = get_tiles(tiles)
-    sources = ["s3://gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
+    sources: List[str] = get_tiles(tiles)
+    # sources = ["s3://gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
     click.echo("Processing sources:")
     click.echo(sources)
 
