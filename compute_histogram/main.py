@@ -135,7 +135,7 @@ def get_histo(sources):
 def warp(sources):
     for source in sources:
         local_src = os.path.join("/mnt/data/img", os.path.basename(source))
-        cmd = ["gdalwarp", source, local_src]
+        cmd = ["gdalwarp", "-co", "COMPRESS=LZW", source, local_src]
         p = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
         o, e = p.communicate()
         print(o)
