@@ -3,6 +3,7 @@ import rasterio
 import numpy as np
 import os
 import csv
+import subprocess as sp
 
 
 HISTO_RANGE = (-2000, 2001)
@@ -130,6 +131,19 @@ def get_histo(sources):
 
     np.savetxt("histogram.csv", histogram, fmt='%1.2f, %d')
 
+@stage(workers=WORKERS, qsize=QSIZE)
+def warp(sources):
+    for source in sources:
+        local_src = os.path.join("/mnt/data/img", os.path.basename(source))
+        cmd = ["gdalwarp", source, local_src]
+        p = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE)
+        o, e = p.communicate()
+        print(o)
+        if p.returncode != 0:
+            raise Exception(e)
+        yield local_src
+
+
 if __name__ == "__main__":
 
     sources = get_tiles()
@@ -137,7 +151,7 @@ if __name__ == "__main__":
     print("Processing sources:")
     print(sources)
 
-    pipe = sources | get_min_max
+    pipe = sources | warp | get_min_max
 
     min = 0
     max = 0
