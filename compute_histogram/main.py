@@ -6,18 +6,18 @@ import csv
 import subprocess as sp
 
 
-HISTO_RANGE = (-10000, 300) # intactness: actual range -99.16411508262776 -2.7564810989789996  -> use int(value * 100)
-# HISTO_RANGE = (2500, 11000) # significance: -87.13933117310584 - 44590.80941143941 -> use log(value + 100) * 1000
+# HISTO_RANGE = (-10000, 300) # intactness: actual range -99.16411508262776 -2.7564810989789996  -> use int(value * 100)
+HISTO_RANGE = (2500, 11000) # significance: -87.13933117310584 - 44590.80941143941 -> use log(value + 100) * 1000
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
-WORKERS = 50
+WORKERS = 80
 QSIZE = 5
 
 PATHS = [
     "/vsis3/gfw-files/2018_update/biodiversity_significance/{tile_id}.tif",
     "/vsis3/gfw-files/2018_update/plantations/{tile_id}.tif",
 ]
-TILE_CSV = "csv/bio_intact_list.txt"
+TILE_CSV = "csv/bio_sig_list.txt"
 
 
 @stage(workers=WORKERS, qsize=QSIZE)
@@ -52,8 +52,8 @@ def process_sources(
         # max = np.max(m)
         w = w[~np.isnan(w)]
 
-        w = (w * 100).astype(np.int16)  # intactness
-        # w = (np.log(w + 100) * 1000).astype(np.int16)  # significance
+        # w = (w * 100).astype(np.int16)  # intactness
+        w = (np.log(w + 100) * 1000).astype(np.int16)  # significance
 
         histo = _compute_histogram(w, BINS, HISTO_RANGE)
         w = None
@@ -121,7 +121,8 @@ def get_histo(sources):
         else:
             result = add_histogram(result, histo)
 
-    bins = np.array([x / 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
+    # bins = np.array([x / 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
+    bins = np.array([np.exp(x/1000) - 100 for x in range(HISTO_RANGE[0], HISTO_RANGE[1])])
     histogram = np.vstack((bins, result)).T
 
     print("Histogram: ")
@@ -160,5 +161,5 @@ if __name__ == "__main__":
     print("Processing sources:")
     print(sources)
 
-    get_histo(sources)
+    get_histo([sources[0]])
 
