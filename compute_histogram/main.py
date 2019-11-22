@@ -161,5 +161,5 @@ if __name__ == "__main__":
     print("Processing sources:")
     print(sources)
 
-    get_histo([sources[0]])
+    get_histo(sources)
 
