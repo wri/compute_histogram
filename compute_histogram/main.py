@@ -57,8 +57,8 @@ def get_min_max(sources):
         with rasterio.open(source) as src1:
             w = (src1.read(1))
 
-        min = w.min
-        max = w.max
+        min = np.amin(w)
+        max = np.amax(w)
         w = None
         yield (min, max)
 
