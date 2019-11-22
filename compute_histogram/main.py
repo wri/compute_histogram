@@ -10,7 +10,7 @@ HISTO_RANGE = (-10000, 300) # intactness: actual range -99.16411508262776 -2.756
 # HISTO_RANGE = (2500, 11000) # significance: -87.13933117310584 - 44590.80941143941 -> use log(value + 100) * 1000
 BINS = len(range(HISTO_RANGE[0], HISTO_RANGE[1]))
 MAX_BLOCK_SIZE = 4000
-WORKERS = 50
+WORKERS = 1
 QSIZE = 5
 
 PATHS = [
@@ -41,8 +41,12 @@ def process_sources(
     for source in sources:
         print(source)
 
-        with rasterio.open(source) as src:
-            w = src.read(1)
+        try:
+            with rasterio.open(source) as src:
+                w = src.read(1)
+        except rasterio.RasterioIOError:
+            print(f"Could not read {source}")
+            raise
         # m = _get_mask(w, 0)
         # min = np.min(m)
         # max = np.max(m)
