@@ -7,6 +7,8 @@ import click
 import numpy as np
 import rasterio
 from parallelpipe import stage
+from rasterio import RasterioIOError
+from retrying import retry
 
 WORKERS: int = multiprocessing.cpu_count()
 QSIZE: int = 5
@@ -154,14 +156,7 @@ def process_sources(
     for source in sources:
         click.echo(source)
 
-        try:
-            with rasterio.open(source) as src:
-                w: np.ndarray = src.read(1)
-        except rasterio.RasterioIOError:
-            click.echo(f"Could not read {source}")
-            raise
-
-        w = w[~np.isnan(w)]
+        w = read_source(source)
 
         if method == "linear":
             w = (w * 100).astype(np.int16)
@@ -181,10 +176,7 @@ def get_min_max(sources: Iterable[str]) -> Iterable[Tuple[int, int]]:
     for source in sources:
         click.echo(f"Reading tile {source}")
 
-        with rasterio.open(source) as src:
-            w = src.read(1)
-
-        w = w[~np.isnan(w)]
+        w = read_source(source)
 
         if len(w):
             min = np.amin(w)
@@ -194,6 +186,28 @@ def get_min_max(sources: Iterable[str]) -> Iterable[Tuple[int, int]]:
             yield (min, max)
         else:
             click.echo(f"Tile {source} is empty")
+
+
+def retry_if_rasterio_io_error(exception) -> bool:
+    is_rasterio_io_error: bool = isinstance(
+        exception, RasterioIOError
+    ) and "IReadBlock failed" in str(exception)
+    if is_rasterio_io_error:
+        print("RasterioIO Error - RETRY")
+    return is_rasterio_io_error
+
+
+@retry(
+    retry_on_exception=retry_if_rasterio_io_error,
+    stop_max_attempt_number=7,
+    wait_exponential_multiplier=1000,
+    wait_exponential_max=300000,
+)
+def read_source(source):
+    with rasterio.open(source) as src:
+        w = src.read(1)
+
+    return w[~np.isnan(w)]
 
 
 def _add_histogram(h1: np.ndarray, h2: np.ndarray) -> np.ndarray:
