@@ -111,7 +111,9 @@ def compute_min_max(sources: List[str]) -> Tuple[float, float]:
             min_value = minmax[0]
         if minmax[1] > max_value:
             max_value = minmax[1]
+        click.echo(f"MIN: {min_value}, MAX: {max_value}")
 
+    click.echo("DONE MIN MAX. Final result:")
     click.echo(f"MIN: {min_value}, MAX: {max_value}")
     return min_value, max_value
 
@@ -183,7 +185,7 @@ def get_min_max(sources: Iterable[str]) -> Iterable[Tuple[int, int]]:
             max = np.amax(w)
             w = None
             click.echo(f"Tile {source} has min {min} and max {max}")
-            yield (min, max)
+            yield min, max
         else:
             click.echo(f"Tile {source} is empty")
 
