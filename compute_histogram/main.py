@@ -22,6 +22,8 @@ QSIZE: int = 5
 @click.option(
     "-w", "--workers", default=None, type=int, help="Number of parallel workers"
 )
+@click.option("--min_value", default=None, type=float, help="Minimum value in tile set")
+@click.option("--max_value", default=None, type=float, help="Maximum value in tile set")
 @click.option(
     "--minmax_only",
     is_flag=True,
@@ -29,13 +31,18 @@ QSIZE: int = 5
     type=bool,
     help="Only compute minmax, not histogram",
 )
-def cli(tiles: str, method: str, workers: Optional[int], minmax_only: bool):
+def cli(
+    tiles: str,
+    method: str,
+    workers: Optional[int],
+    min_value: Optional[float],
+    max_value: Optional[float],
+    minmax_only: bool,
+):
 
     histo_range: Tuple[int, int]
     bins: int
     offset: float
-    min_value: float
-    max_value: float
 
     if workers:
         global WORKERS
@@ -46,9 +53,10 @@ def cli(tiles: str, method: str, workers: Optional[int], minmax_only: bool):
     click.echo("Processing sources:")
     click.echo(sources)
 
-    min_value, max_value = compute_min_max(sources)
+    if not (min_value and max_value):
+        min_valye, max_value = compute_min_max(sources)
 
-    if not minmax_only:
+    if not minmax_only and (min_value and max_value):
         histo_range, bins, offset = get_range(min_value, max_value, method)
         get_histo(sources, histo_range, bins, offset, method)
 
