@@ -48,7 +48,7 @@ def cli(
     click.echo(sources)
 
     if not (min_value and max_value):
-        min_valye, max_value = compute_min_max(sources, workers)
+        min_value, max_value = compute_min_max(sources, workers)
 
     if not minmax_only and (min_value and max_value):
         histo_range, bins, offset = get_range(min_value, max_value, method)
