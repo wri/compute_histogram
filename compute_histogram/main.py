@@ -50,9 +50,8 @@ def cli(
     if not (min_value and max_value):
         min_value, max_value = compute_min_max(sources, workers)
 
-    if not minmax_only and (min_value and max_value):
-        histo_range, bins, offset = get_range(min_value, max_value, method)
-        get_histo(sources, histo_range, bins, offset, method, workers)
+    histo_range, bins, offset = get_range(min_value, max_value, method)
+    get_histo(sources, histo_range, bins, offset, method, workers)
 
 
 def get_tiles(f: str):
@@ -143,7 +142,7 @@ def get_range(
             int(max_value * 100) + 10,
         )
     elif method == "log":
-        if min_value < 0:
+        if min_value <= 0:
             offset = abs(min_value) + 1
         histo_range = (
             int(np.log(min_value + offset) * 1000),
