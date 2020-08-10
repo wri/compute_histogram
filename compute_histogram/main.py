@@ -1,17 +1,16 @@
 import os
 import csv
-import multiprocessing
-from typing import Iterable, List, Optional, Tuple
+
+from typing import List, Optional, Tuple
+from multiprocessing import Pool
+from multiprocessing import cpu_count
 
 import click
 import numpy as np
 import rasterio
-from parallelpipe import stage
+from itertools import repeat
 from rasterio import RasterioIOError
 from retrying import retry
-
-WORKERS: int = multiprocessing.cpu_count()
-QSIZE: int = 5
 
 
 @click.command()
@@ -20,7 +19,7 @@ QSIZE: int = 5
     "-m", "--method", default="linear", type=str, help="Method for creating bins"
 )
 @click.option(
-    "-w", "--workers", default=None, type=int, help="Number of parallel workers"
+    "-w", "--workers", default=cpu_count(), type=int, help="Number of parallel workers"
 )
 @click.option("--min_value", default=None, type=float, help="Minimum value in tile set")
 @click.option("--max_value", default=None, type=float, help="Maximum value in tile set")
@@ -34,19 +33,14 @@ QSIZE: int = 5
 def cli(
     tiles: str,
     method: str,
-    workers: Optional[int],
+    workers: int,
     min_value: Optional[float],
     max_value: Optional[float],
     minmax_only: bool,
 ):
-
     histo_range: Tuple[int, int]
     bins: int
     offset: float
-
-    if workers:
-        global WORKERS
-        WORKERS = workers
 
     sources: List[str] = get_tiles(tiles)
     # sources = ["s3://gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
@@ -54,15 +48,14 @@ def cli(
     click.echo(sources)
 
     if not (min_value and max_value):
-        min_valye, max_value = compute_min_max(sources)
+        min_valye, max_value = compute_min_max(sources, workers)
 
     if not minmax_only and (min_value and max_value):
         histo_range, bins, offset = get_range(min_value, max_value, method)
-        get_histo(sources, histo_range, bins, offset, method)
+        get_histo(sources, histo_range, bins, offset, method, workers)
 
 
 def get_tiles(f: str):
-
     tiles: List[str] = list()
 
     with open(os.path.join(f)) as csv_file:
@@ -79,15 +72,21 @@ def get_histo(
     bins: int,
     offset: float,
     method: str,
+    workers: int,
 ) -> None:
-    pipe = sources | process_sources(histo_range, bins, method)
+    pool = Pool(workers)
+    results = pool.starmap(
+        process_sources, zip(sources, repeat(histo_range), repeat(bins), repeat(method))
+    )
+    pool.close()  # 'TERM'
+    pool.join()  # 'KILL'
 
     first: bool = True
     result: Optional[np.ndarray] = None
 
-    for histo in pipe.results():
+    for histo in results:
         if first:
-            result = histo[0]
+            result = histo
             first = False
         else:
             result = _add_histogram(result, histo)
@@ -109,17 +108,22 @@ def get_histo(
     np.savetxt("histogram.csv", histogram, fmt="%1.2f, %d")
 
 
-def compute_min_max(sources: List[str]) -> Tuple[float, float]:
+def compute_min_max(sources: List[str], workers: int) -> Tuple[float, float]:
     min_value: float = 0
     max_value: float = 0
 
-    pipe = sources | get_min_max
-    for minmax in pipe.results():
-        if minmax[0] < min_value:
-            min_value = minmax[0]
-        if minmax[1] > max_value:
-            max_value = minmax[1]
-        click.echo(f"MIN: {min_value}, MAX: {max_value}")
+    pool = Pool(workers)
+    results = pool.map(get_min_max, sources)
+    pool.close()  # 'TERM'
+    pool.join()  # 'KILL'
+
+    for result in results:
+        if result:
+            if result[0] < min_value:
+                min_value = result[0]
+            if result[1] > max_value:
+                max_value = result[1]
+            click.echo(f"MIN: {min_value}, MAX: {max_value}")
 
     click.echo("DONE MIN MAX. Final result:")
     click.echo(f"MIN: {min_value}, MAX: {max_value}")
@@ -142,8 +146,8 @@ def get_range(
         if min_value < 0:
             offset = abs(min_value) + 1
         histo_range = (
-            np.log(min_value + offset) * 1000,
-            np.log(max_value + offset) * 1000,
+            int(np.log(min_value + offset) * 1000),
+            int(np.log(max_value + offset) * 1000),
         )
     else:
         raise ValueError(f"Unknown method {method}")
@@ -154,48 +158,44 @@ def get_range(
     return histo_range, bins, offset
 
 
-@stage(workers=WORKERS, qsize=QSIZE)
 def process_sources(
-    sources: Iterable[str], histo_range: Tuple[int, int], bins: int, method: str
-) -> Iterable[Tuple[np.ndarray]]:
+    source: str, histo_range: Tuple[int, int], bins: int, method: str
+) -> np.ndarray:
     """
     Loops over all blocks and reads first input raster to get coordinates.
     Append values from all input rasters
     """
 
-    for source in sources:
-        click.echo(source)
+    click.echo(source)
 
-        w = read_source(source)
+    w = read_source(source)
 
-        if method == "linear":
-            w = (w * 100).astype(np.int16)
-        elif method == "log":
-            w = (np.log(w + 100) * 1000).astype(np.int16)
-        else:
-            raise ValueError(f"Unknown method {method}")
+    if method == "linear":
+        w = (w * 100).astype(np.int16)
+    elif method == "log":
+        w = (np.log(w + 100) * 1000).astype(np.int16)
+    else:
+        raise ValueError(f"Unknown method {method}")
 
-        histo: np.ndarray = _compute_histogram(w, bins, histo_range)
+    histo: np.ndarray = _compute_histogram(w, bins, histo_range)
+    w = None
+    return histo
+
+
+def get_min_max(source: str) -> Optional[Tuple[int, int]]:
+    click.echo(f"Reading tile {source}")
+
+    w = read_source(source)
+
+    if len(w):
+        min = np.amin(w)
+        max = np.amax(w)
         w = None
-        yield (histo,)
-
-
-@stage(workers=WORKERS, qsize=QSIZE)
-def get_min_max(sources: Iterable[str]) -> Iterable[Tuple[int, int]]:
-
-    for source in sources:
-        click.echo(f"Reading tile {source}")
-
-        w = read_source(source)
-
-        if len(w):
-            min = np.amin(w)
-            max = np.amax(w)
-            w = None
-            click.echo(f"Tile {source} has min {min} and max {max}")
-            yield min, max
-        else:
-            click.echo(f"Tile {source} is empty")
+        click.echo(f"Tile {source} has min {min} and max {max}")
+        return min, max
+    else:
+        click.echo(f"Tile {source} is empty")
+        return None
 
 
 def retry_if_rasterio_io_error(exception) -> bool:
