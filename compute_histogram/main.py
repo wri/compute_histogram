@@ -1,6 +1,4 @@
 import json
-import os
-import csv
 
 from typing import List, Optional, Tuple, Dict, Any
 from multiprocessing import Pool
@@ -50,6 +48,8 @@ def cli(
     click.echo("Processing sources:")
     click.echo(sources)
 
+    click.echo(f"MIN VALUE: {min_value}")
+    click.echo(f"MAX VALUE: {max_value}")
     if not (min_value and max_value):
         min_value, max_value = compute_min_max(sources, workers)
 
@@ -87,6 +87,9 @@ def get_histo(
     method: str,
     workers: int,
 ) -> None:
+    click.echo("############################################")
+    click.echo("Get Histogram")
+
     pool = Pool(workers)
     results = pool.starmap(
         process_sources, zip(sources, repeat(histo_range), repeat(bins), repeat(method))
@@ -122,6 +125,9 @@ def get_histo(
 
 
 def compute_min_max(sources: List[str], workers: int) -> Tuple[float, float]:
+    click.echo("############################################")
+    click.echo("Compute Min/Max")
+
     min_value: float = 0
     max_value: float = 0
 
@@ -148,6 +154,8 @@ def get_range(
 ) -> Tuple[Tuple[int, int], int, float]:
     offset: float = 0
 
+    click.echo("############################################")
+    click.echo("GET RANGE")
     click.echo(f"Min: {min_value}, Max: {max_value}")
 
     if method == "linear":
