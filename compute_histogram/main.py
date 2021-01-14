@@ -50,7 +50,7 @@ def cli(
 
     click.echo(f"MIN VALUE: {min_value}")
     click.echo(f"MAX VALUE: {max_value}")
-    if not (min_value and max_value):
+    if min_value is None or max_value is None:
         min_value, max_value = compute_min_max(sources, workers)
 
     histo_range, bins, offset = get_range(min_value, max_value, method)
