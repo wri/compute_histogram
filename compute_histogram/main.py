@@ -1,10 +1,13 @@
+import json
 import os
 import csv
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from multiprocessing import Pool
 from multiprocessing import cpu_count
+from urllib.parse import urlparse
 
+import boto3
 import click
 import numpy as np
 import rasterio
@@ -14,7 +17,7 @@ from retrying import retry
 
 
 @click.command()
-@click.argument("tiles", type=str)
+@click.argument("source", type=str)
 @click.option(
     "-m", "--method", default="linear", type=str, help="Method for creating bins"
 )
@@ -31,7 +34,7 @@ from retrying import retry
     help="Only compute minmax, not histogram",
 )
 def cli(
-    tiles: str,
+    source: str,
     method: str,
     workers: int,
     min_value: Optional[float],
@@ -42,7 +45,7 @@ def cli(
     bins: int
     offset: float
 
-    sources: List[str] = get_tiles(tiles)
+    sources: List[str] = get_tiles(source)
     # sources = ["s3://gfw-files/tmaschler/bio-intact/0000093184-0000093184.tif"]
     click.echo("Processing sources:")
     click.echo(sources)
@@ -55,14 +58,25 @@ def cli(
 
 
 def get_tiles(f: str):
-    tiles: List[str] = list()
 
-    with open(os.path.join(f)) as csv_file:
-        csv_reader = csv.reader(csv_file, delimiter=",")
-        for row in csv_reader:
-            tiles.append(row[0])
+    bucket, key = split_s3_path(f)
+
+    s3_client = boto3.client("s3")
+    tiles_resp = s3_client.get_object(Bucket=bucket, Key=key)
+    tiles_geojson: Dict[str, Any] = json.loads(
+        tiles_resp["Body"].read().decode("utf-8")
+    )
+
+    tiles: List[str] = list()
+    for feature in tiles_geojson["features"]:
+        tiles.append(feature["properties"]["name"])
 
     return tiles
+
+
+def split_s3_path(s3_path: str) -> Tuple[str, str]:
+    o = urlparse(s3_path, allow_fragments=False)
+    return o.netloc, o.path.lstrip("/")
 
 
 def get_histo(
