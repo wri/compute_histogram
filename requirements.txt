@@ -1,0 +1,6 @@
+click
+detect-secrets
+rasterio[s3]
+parallelpipe
+pre-commit
+retrying
